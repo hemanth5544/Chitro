@@ -1,15 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import './App.css'
-
-type VideoMeta = {
-  id: string
-  filename: string
-  contentType: string
-  size: number
-  createdAt: string
-  s3Key: string
-  s3Url: string // Always included - publicly accessible URL
-}
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { ThemeToggle } from '@/components/theme-toggle'
+import { Play, Pause, Square, Download, Upload, Trash2, X, Video, Check, Copy, ExternalLink } from 'lucide-react'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
 
@@ -20,15 +13,17 @@ function App() {
   const [chunks, setChunks] = useState<Blob[]>([])
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [videos, setVideos] = useState<VideoMeta[]>([])
-  const [showOptions, setShowOptions] = useState(false)
+  const [showPreview, setShowPreview] = useState(false)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [uploadedVideoUrl, setUploadedVideoUrl] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const videoPreviewRef = useRef<HTMLVideoElement>(null)
 
-  // Timer
   useEffect(() => {
     if (isRecording && !isPaused) {
       timerRef.current = setInterval(() => setDuration((d) => d + 1), 1000)
@@ -75,7 +70,11 @@ function App() {
       recorder.onstop = () => {
         setChunks(localChunks)
         setIsRecording(false)
-        setShowOptions(true)
+        // Create preview URL for the recorded video
+        const blob = new Blob(localChunks, { type: mimeType })
+        const url = URL.createObjectURL(blob)
+        setPreviewUrl(url)
+        setShowPreview(true)
       }
 
       recorder.start(1000)
@@ -120,84 +119,79 @@ function App() {
     a.download = `chitro-${Date.now()}.webm`
     a.click()
     URL.revokeObjectURL(url)
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
+    resetState()
+  }
+
+  const deleteRecording = () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
     resetState()
   }
 
   const uploadToCloud = async () => {
-    if (!chunks.length) return setError('No recording to upload')
+    console.log('[Upload] Starting upload...', { chunksLength: chunks.length })
+    if (!chunks.length) {
+      console.error('[Upload] No chunks to upload')
+      return setError('No recording to upload')
+    }
+    
     setUploading(true)
     setError(null)
+    
     try {
       const blob = new Blob(chunks, { type: 'video/webm' })
       const filename = `chitro-recording-${Date.now()}.webm`
 
-      console.log('Step 1: Converting blob to base64...', { filename, size: blob.size })
-      
-      // Convert blob to base64 for JSON upload
-      const arrayBuffer = await blob.arrayBuffer()
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
-
-      console.log('Step 2: Uploading to backend...', { 
+      console.log('[Upload] Step 1: Preparing binary upload...', { 
         blobSize: blob.size, 
-        contentType: blob.type,
-        base64Length: base64.length,
+        filename 
+      })
+
+      // Send file as raw binary data (simpler, avoids multipart parsing issues)
+      console.log('[Upload] Step 2: Sending to backend...', { 
+        endpoint: `${API_BASE}/api/recorder/upload`
       })
 
       const res = await fetch(`${API_BASE}/api/recorder/upload`, {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
+        headers: {
+          'Content-Type': 'video/webm',
+          'X-Filename': filename,
         },
-        body: JSON.stringify({ 
-          video: base64,
-          filename,
-          contentType: 'video/webm',
-        }),
+        body: blob, // Send blob directly as binary
       })
-      
-      console.log('Step 3: Upload response', { 
+
+      console.log('[Upload] Step 3: Response received', { 
         status: res.status, 
         statusText: res.statusText,
-        ok: res.ok,
+        ok: res.ok 
       })
 
       if (!res.ok) {
         const text = await res.text()
-        console.error('Upload failed response:', {
-          status: res.status,
+        console.error('[Upload] Upload failed', { 
+          status: res.status, 
           statusText: res.statusText,
-          body: text.substring(0, 1000),
+          error: text 
         })
-        throw new Error(`Upload failed: ${res.status} ${res.statusText}\n${text.substring(0, 500)}`)
+        throw new Error(`Upload failed: ${res.status} ${res.statusText}`)
       }
 
       const data = await res.json()
-      console.log('Step 4: Upload successful!', { 
-        videoId: data.videoId,
-        publicUrl: data.publicUrl,
-        message: data.message,
-      })
+      console.log('[Upload] Step 4: Upload successful!', data)
       
-      await loadVideos()
-      setShowOptions(false)
+      // Close preview modal and show success modal
+      setError(null)
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+      setShowPreview(false)
+      setUploadedVideoUrl(data.publicUrl)
+      setShowSuccessModal(true)
       resetState()
-      alert(`Uploaded successfully! Video is now in Sevalla storage.\nPublic URL: ${data.publicUrl}`)
     } catch (err) {
-      console.error('Upload error:', err)
+      console.error('[Upload] Error:', err)
       setError(err instanceof Error ? err.message : 'Upload failed')
     } finally {
       setUploading(false)
-    }
-  }
-
-  const loadVideos = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/api/recorder/videos`)
-      if (!res.ok) throw new Error('Failed to list videos')
-      const data = await res.json()
-      setVideos(data.videos || [])
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load videos')
     }
   }
 
@@ -206,124 +200,252 @@ function App() {
     setDuration(0)
     setIsRecording(false)
     setIsPaused(false)
-    setShowOptions(false)
+    setShowPreview(false)
+    setPreviewUrl(null)
+    setError(null)
   }
 
-  useEffect(() => {
-    loadVideos()
-  }, [])
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      setError('Failed to copy to clipboard')
+    }
+  }
+
+  const closeSuccessModal = () => {
+    setShowSuccessModal(false)
+    setUploadedVideoUrl(null)
+    setCopied(false)
+  }
 
   return (
-    <div className="page">
-      <header className="hero">
-        <div>
-          <p className="eyebrow">Chitro · Screen Recorder</p>
-          <h1>Record, Save, or Upload</h1>
-          <p className="subhead">
-            Capture your screen in one click. Save locally or upload to the cloud via the Motia backend.
-          </p>
-          <div className="actions">
-            {!isRecording ? (
-              <button className="btn primary" onClick={startRecording}>
-                Start Recording
-              </button>
-            ) : (
-              <>
-                <button className="btn" onClick={pauseOrResume}>
-                  {isPaused ? 'Resume' : 'Pause'}
-                </button>
-                <button className="btn danger" onClick={stopRecording}>
-                  Stop
-                </button>
-              </>
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto px-4 py-8 max-w-7xl">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
+              Chitro
+            </h1>
+            <p className="text-muted-foreground mt-1">Screen Recording Sharing for Everyone</p>
+          </div>
+          <ThemeToggle />
+        </div>
+
+        {/* Recording Controls */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Video className="h-5 w-5" />
+              Screen Recorder
+            </CardTitle>
+            <CardDescription>
+              Record your screen with audio and save locally or upload to cloud storage
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Video Preview */}
+            {isRecording && (
+              <div className="rounded-lg overflow-hidden border bg-black aspect-video">
+                <video ref={videoPreviewRef} autoPlay muted className="w-full h-full object-contain" />
+              </div>
             )}
-            <button className="btn ghost" onClick={loadVideos}>
-              Refresh Library
-            </button>
-          </div>
-          {isRecording && (
-            <div className="status">
-              <span className="dot" /> Recording · {formatTime(duration)}
-            </div>
-          )}
-        </div>
-        {isRecording && <div className="preview">
-          <video ref={videoPreviewRef} autoPlay muted />
-        </div>}
-      </header>
 
-      {showOptions && (
-        <section className="panel">
-          <h3>Recording ready</h3>
-          <p>Choose where to save your recording.</p>
-          <div className="actions">
-            <button className="btn" onClick={saveToDevice}>
-              Save to device
-            </button>
-            <button className="btn primary" onClick={uploadToCloud} disabled={uploading}>
-              {uploading ? 'Uploading…' : 'Upload to cloud'}
-            </button>
-          </div>
-        </section>
-      )}
-
-      <section className="panel">
-        <div className="panel-head">
-      <div>
-            <h3>Your recordings</h3>
-            <p>Latest uploads from the backend.</p>
-      </div>
-          <button className="btn ghost" onClick={loadVideos}>
-            Refresh
-        </button>
-        </div>
-        {videos.length === 0 ? (
-          <p className="muted">No videos yet.</p>
-        ) : (
-          <div className="video-list">
-            {videos.map((v) => (
-              <div key={v.id} className="video-card">
-                <div className="video-meta">
-                  <h4>{v.filename}</h4>
-                  <p className="muted">
-                    {new Date(v.createdAt).toLocaleString()} · {(v.size / 1024 / 1024).toFixed(2)} MB
-                  </p>
-                  <p className="muted small">ID: {v.id}</p>
-                  <div className="video-url">
-                    <p className="muted small">Public URL:</p>
-                    <a 
-                      href={v.s3Url} 
-                      target="_blank" 
-                      rel="noreferrer"
-                      className="url-link"
-                      title={v.s3Url}
-                    >
-                      {v.s3Url.length > 60 ? v.s3Url.substring(0, 60) + '...' : v.s3Url}
-                    </a>
-                  </div>
-                </div>
-                <div className="video-actions">
-                  <a className="btn small" href={v.s3Url} target="_blank" rel="noreferrer">
-                    Watch
-                  </a>
-                  <button 
-                    className="btn small ghost" 
-                    onClick={() => {
-                      navigator.clipboard.writeText(v.s3Url)
-                      alert('URL copied to clipboard!')
-                    }}
-                  >
-                    Copy URL
-                  </button>
+            {/* Recording Status */}
+            {isRecording && (
+              <div className="flex items-center justify-center gap-3">
+                <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-destructive/10 border border-destructive/20">
+                  <div className="h-3 w-3 rounded-full bg-destructive animate-pulse" />
+                  <span className="font-mono text-lg font-semibold">{formatTime(duration)}</span>
                 </div>
               </div>
-            ))}
+            )}
+
+            {/* Controls */}
+            <div className="flex flex-wrap gap-3 justify-center">
+              {!isRecording ? (
+                <Button onClick={startRecording} size="lg" className="gap-2">
+                  <Play className="h-4 w-4" />
+                  Start Recording
+                </Button>
+              ) : (
+                <>
+                  <Button onClick={pauseOrResume} variant="outline" size="lg" className="gap-2">
+                    {isPaused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+                    {isPaused ? 'Resume' : 'Pause'}
+                  </Button>
+                  <Button onClick={stopRecording} variant="destructive" size="lg" className="gap-2">
+                    <Square className="h-4 w-4" />
+                    Stop
+                  </Button>
+                </>
+              )}
+            </div>
+
+            {/* Error Message */}
+            {error && (
+              <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                {error}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Preview Modal */}
+        {showPreview && previewUrl && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+            <Card className="w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+                <div>
+                  <CardTitle className="text-2xl">Recording Preview</CardTitle>
+                  <CardDescription>Review your recording and choose an action</CardDescription>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={deleteRecording}
+                  className="h-8 w-8"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </CardHeader>
+              <CardContent className="flex-1 overflow-hidden flex flex-col gap-6">
+                {/* Video Preview */}
+                <div className="rounded-lg overflow-hidden border bg-black aspect-video">
+                  <video
+                    src={previewUrl}
+                    controls
+                    className="w-full h-full object-contain"
+                    autoPlay
+                  />
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Button
+                    onClick={saveToDevice}
+                    variant="outline"
+                    size="lg"
+                    className="flex-1 gap-2"
+                  >
+                    <Download className="h-5 w-5" />
+                    Save to Device
+                  </Button>
+                  <Button
+                    onClick={uploadToCloud}
+                    disabled={uploading}
+                    size="lg"
+                    className="flex-1 gap-2"
+                  >
+                    {uploading ? (
+                      <>
+                        <Upload className="h-5 w-5 animate-pulse" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-5 w-5" />
+                        Upload to Cloud
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    onClick={deleteRecording}
+                    variant="destructive"
+                    size="lg"
+                    className="flex-1 gap-2"
+                  >
+                    <Trash2 className="h-5 w-5" />
+                    Delete
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         )}
-      </section>
 
-      {error && <div className="error">{error}</div>}
+        {/* Success Modal */}
+        {showSuccessModal && uploadedVideoUrl && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+            <Card className="w-full max-w-2xl mx-4">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-12 w-12 rounded-full bg-green-500/20 flex items-center justify-center">
+                    <Check className="h-6 w-6 text-green-500" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-2xl">Upload Successful!</CardTitle>
+                    <CardDescription>Your video is now available at the public URL</CardDescription>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={closeSuccessModal}
+                  className="h-8 w-8"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Public URL Display */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-muted-foreground">Public URL</label>
+                  <div className="flex items-center gap-2 p-4 rounded-lg border bg-muted/50">
+                    <code className="flex-1 text-sm font-mono break-all text-foreground">
+                      {uploadedVideoUrl}
+                    </code>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => copyToClipboard(uploadedVideoUrl)}
+                      className="gap-2 shrink-0"
+                    >
+                      {copied ? (
+                        <>
+                          <Check className="h-4 w-4" />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-4 w-4" />
+                          Copy
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    asChild
+                    size="lg"
+                    className="flex-1 gap-2"
+                  >
+                    <a href={uploadedVideoUrl} target="_blank" rel="noreferrer">
+                      <ExternalLink className="h-4 w-4" />
+                      Open Video
+                    </a>
+                  </Button>
+                  <Button
+                    onClick={closeSuccessModal}
+                    variant="outline"
+                    size="lg"
+                    className="flex-1"
+                  >
+                    Done
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
+    </div>
   )
 }
 
