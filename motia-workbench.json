@@ -1,0 +1,48 @@
+[
+  {
+    "id": "basic-tutorial",
+    "config": {
+      "src/petstore/state-audit-cron.step.ts": {
+        "x": -175,
+        "y": 219,
+        "sourceHandlePosition": "right"
+      },
+      "src/petstore/process-food-order.step.ts": {
+        "x": 144,
+        "y": 17,
+        "sourceHandlePosition": "bottom"
+      },
+      "src/petstore/notification.step.ts": {
+        "x": 331,
+        "y": 261,
+        "sourceHandlePosition": "bottom"
+      },
+      "src/petstore/api.step.ts": {
+        "x": -175,
+        "y": 3,
+        "sourceHandlePosition": "right"
+      }
+    }
+  },
+  {
+    "id": "chitro-recorder",
+    "config": {
+      "src/recorder/upload-video.step.ts": {
+        "x": 31,
+        "y": 0
+      },
+      "src/recorder/list-videos.step.ts": {
+        "x": -874,
+        "y": 206
+      },
+      "src/recorder/get-video.step.ts": {
+        "x": -836,
+        "y": 2
+      },
+      "src/recorder/get-upload-url.step.ts": {
+        "x": -463,
+        "y": -15
+      }
+    }
+  }
+]
