@@ -17,7 +17,7 @@ export const config: ApiRouteConfig = {
   flows: ['chitro-recorder'],
   method: 'POST',
   path: '/api/recorder/upload',
-  emits: [],
+  emits: ['video-uploaded'],
   // Note: bodySchema for file uploads is handled as multipart/form-data
   responseSchema: {
     200: responseSchema,
@@ -26,7 +26,7 @@ export const config: ApiRouteConfig = {
   },
 }
 
-export const handler: Handlers['UploadVideo'] = async (req, { logger }) => {
+export const handler: Handlers['UploadVideo'] = async (req, { logger, emit, state }) => {
   try {
     logger.info('Uploading video to Sevalla', { 
       contentType: req.headers['content-type'],
@@ -106,6 +106,33 @@ export const handler: Handlers['UploadVideo'] = async (req, { logger }) => {
       s3Key,
       publicUrl // Store the public URL directly
     )
+
+    // Cache the video metadata immediately for fast retrieval
+    await state.set('videos', videoId, {
+      id: videoId,
+      filename,
+      contentType,
+      size: videoBuffer.length,
+      createdAt: new Date().toISOString(),
+      s3Key,
+      s3Url: publicUrl,
+    })
+
+    // Invalidate video list cache to ensure fresh data
+    await state.clear('video-lists')
+
+    // Emit event for async processing (verification, additional processing, etc.)
+    await emit({
+      topic: 'video-uploaded',
+      data: {
+        videoId,
+        s3Key,
+        filename,
+        contentType,
+        size: videoBuffer.length,
+        publicUrl,
+      },
+    })
 
     logger.info('Video uploaded successfully', { videoId, s3Key, publicUrl })
 

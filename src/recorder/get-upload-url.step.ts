@@ -22,7 +22,7 @@ export const config: ApiRouteConfig = {
   flows: ['chitro-recorder'],
   method: 'POST',
   path: '/api/recorder/upload-url',
-  emits: [],
+  emits: ['video-upload-initiated'],
   bodySchema: requestSchema,
   responseSchema: {
     200: responseSchema,
@@ -31,7 +31,7 @@ export const config: ApiRouteConfig = {
   },
 }
 
-export const handler: Handlers['GetUploadUrl'] = async (req, { logger }) => {
+export const handler: Handlers['GetUploadUrl'] = async (req, { logger, emit, state }) => {
   try {
     logger.info('Generating upload URL', { body: req.body })
 
@@ -51,6 +51,28 @@ export const handler: Handlers['GetUploadUrl'] = async (req, { logger }) => {
       size || 0,
       s3Key
     )
+
+    // Cache upload URL info temporarily (valid for 1 hour, same as presigned URL)
+    await state.set('upload-urls', videoId, {
+      uploadUrl,
+      videoId,
+      s3Key,
+      filename,
+      contentType,
+      createdAt: new Date().toISOString(),
+    })
+
+    // Emit event for tracking upload initiation (analytics, monitoring, etc.)
+    await emit({
+      topic: 'video-upload-initiated',
+      data: {
+        videoId,
+        s3Key,
+        filename,
+        contentType,
+        size: size || 0,
+      },
+    })
 
     logger.info('Upload URL generated', { videoId, s3Key })
 

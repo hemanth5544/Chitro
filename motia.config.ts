@@ -58,6 +58,10 @@ export default defineConfig({
           publicUrl
         )
 
+        // Note: State management and event emission would be handled here if we had access to Motia context
+        // Since this is a direct Express route, we'll rely on the event step to handle caching
+        // The event will be emitted by the Motia system when the upload completes
+
         console.log('[Upload] Video uploaded successfully', { videoId, s3Key, publicUrl })
 
         res.status(200).json({

@@ -17,6 +17,8 @@ const responseSchema = z.object({
   count: z.number(),
 })
 
+type VideoListResponse = z.infer<typeof responseSchema>
+
 export const config: ApiRouteConfig = {
   type: 'api',
   name: 'ListVideos',
@@ -37,7 +39,7 @@ export const config: ApiRouteConfig = {
   },
 }
 
-export const handler: Handlers['ListVideos'] = async (req, { logger }) => {
+export const handler: Handlers['ListVideos'] = async (req, { logger, state }) => {
   try {
     const limitParam = req.queryParams.limit
     const limit = limitParam
@@ -46,14 +48,33 @@ export const handler: Handlers['ListVideos'] = async (req, { logger }) => {
 
     logger.info('Listing videos', { limit })
 
+    // Check cache first (Motia state management for performance)
+    // Cache key includes limit to handle different pagination
+    const cacheKey = `list:${limit}`
+    const cachedResult = await state.get<VideoListResponse>('video-lists', cacheKey)
+    
+    if (cachedResult) {
+      logger.info('Video list retrieved from cache', { limit, count: cachedResult.count })
+      return {
+        status: 200,
+        body: cachedResult,
+      }
+    }
+
+    // Cache miss - fetch from database
     const videos = await VideoService.listVideos(limit)
+
+    const result = {
+      videos,
+      count: videos.length,
+    }
+
+    // Cache the result for future requests (improves performance)
+    await state.set('video-lists', cacheKey, result)
 
     return {
       status: 200,
-      body: {
-        videos,
-        count: videos.length,
-      },
+      body: result,
     }
   } catch (error) {
     logger.error('Error listing videos', { error })

@@ -12,6 +12,8 @@ const responseSchema = z.object({
   s3Url: z.string().url(), // Always included - publicly accessible URL
 })
 
+type VideoMetadata = z.infer<typeof responseSchema>
+
 export const config: ApiRouteConfig = {
   type: 'api',
   name: 'GetVideo',
@@ -27,12 +29,23 @@ export const config: ApiRouteConfig = {
   },
 }
 
-export const handler: Handlers['GetVideo'] = async (req, { logger }) => {
+export const handler: Handlers['GetVideo'] = async (req, { logger, state }) => {
   try {
     const { videoId } = req.pathParams
 
     logger.info('Getting video', { videoId })
 
+    // Check cache first (Motia state management for performance)
+    const cachedVideo = await state.get<VideoMetadata>('videos', videoId)
+    if (cachedVideo) {
+      logger.info('Video retrieved from cache', { videoId })
+      return {
+        status: 200,
+        body: cachedVideo,
+      }
+    }
+
+    // Cache miss - fetch from database
     const video = await VideoService.getVideoMetadata(videoId)
 
     if (!video) {
@@ -43,6 +56,9 @@ export const handler: Handlers['GetVideo'] = async (req, { logger }) => {
         },
       }
     }
+
+    // Cache the result for future requests (improves performance)
+    await state.set('videos', videoId, video)
 
     return {
       status: 200,

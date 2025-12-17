@@ -12,10 +12,13 @@ declare module 'motia' {
   }
 
   interface Handlers {
-    'UploadVideo': ApiRouteHandler<Record<string, unknown>, ApiResponse<200, { videoId: string; s3Key: string; publicUrl: string; message: string }> | ApiResponse<400, { error: string }> | ApiResponse<500, { error: string }>, never>
+    'UploadVideo': ApiRouteHandler<Record<string, unknown>, ApiResponse<200, { videoId: string; s3Key: string; publicUrl: string; message: string }> | ApiResponse<400, { error: string }> | ApiResponse<500, { error: string }>, { topic: 'video-uploaded'; data: { videoId: string; s3Key: string; filename: string; contentType: string; size: number; publicUrl: string } }>
+    'ProcessVideoUpload': EventHandler<{ videoId: string; s3Key: string; filename: string; contentType: string; size: number; publicUrl: string }, never>
     'ListVideos': ApiRouteHandler<Record<string, unknown>, ApiResponse<200, { videos: Array<{ id: string; filename: string; contentType: string; size: number; createdAt: string; s3Key: string; s3Url: string }>; count: number }> | ApiResponse<500, { error: string }>, never>
     'GetVideo': ApiRouteHandler<Record<string, unknown>, ApiResponse<200, { id: string; filename: string; contentType: string; size: number; createdAt: string; s3Key: string; s3Url: string }> | ApiResponse<404, { error: string }> | ApiResponse<500, { error: string }>, never>
     'GetUploadUrl': ApiRouteHandler<{ filename: string; contentType: string; size?: number }, ApiResponse<200, { uploadUrl: string; videoId: string; s3Key: string }> | ApiResponse<400, { error: string }> | ApiResponse<500, { error: string }>, never>
+    'DeleteVideo': ApiRouteHandler<Record<string, unknown>, ApiResponse<200, { message: string; videoId: string }> | ApiResponse<404, { error: string }> | ApiResponse<500, { error: string }>, never>
+    'CacheCleanupJob': CronHandler<never>
     'StateAuditJob': CronHandler<{ topic: 'notification'; data: { templateId: string; email: string; templateData: Record<string, unknown> } }>
     'ProcessFoodOrder': EventHandler<{ email: string; quantity: number; petId: string }, { topic: 'notification'; data: { templateId: string; email: string; templateData: Record<string, unknown> } }>
     'Notification': EventHandler<{ templateId: string; email: string; templateData: Record<string, unknown> }, never>
