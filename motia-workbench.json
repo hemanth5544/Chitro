@@ -28,32 +28,32 @@
     "id": "chitro-recorder",
     "config": {
       "src/recorder/upload-video.step.ts": {
-        "x": -336,
-        "y": 95
+        "x": -386,
+        "y": 94
       },
       "src/recorder/process-video-upload.step.ts": {
-        "x": 10,
+        "x": 25,
         "y": 101
       },
       "src/recorder/list-videos.step.ts": {
-        "x": 57,
-        "y": 307
+        "x": -224,
+        "y": 410
       },
       "src/recorder/get-video.step.ts": {
-        "x": -274,
-        "y": -100
+        "x": 135,
+        "y": 451
       },
       "src/recorder/get-upload-url.step.ts": {
-        "x": -346,
-        "y": 282
+        "x": -823,
+        "y": 152
       },
       "src/recorder/delete-video.step.ts": {
-        "x": -346,
-        "y": 485
+        "x": -630,
+        "y": 413
       },
       "src/recorder/cache-cleanup-cron.step.ts": {
-        "x": 415,
-        "y": 290
+        "x": 525,
+        "y": 167
       }
     }
   }

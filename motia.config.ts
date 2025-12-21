@@ -13,17 +13,15 @@ import { VideoService } from './src/services/video-service.js'
 export default defineConfig({
   plugins: [observabilityPlugin, statesPlugin, endpointPlugin, logsPlugin, bullmqPlugin, chitroRecorderPlugin],
   app: (app) => {
-    // Enable CORS - Allow all origins (no credentials needed)
     const corsOptions = {
-      origin: true, // Allow all origins
-      credentials: false, // No credentials needed
+      origin: true, 
+      credentials: false, 
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
       allowedHeaders: ['Content-Type', 'Authorization', 'X-Filename', 'X-Requested-With', 'Accept'],
       exposedHeaders: ['Content-Length', 'Content-Type'],
     }
     app.use(cors(corsOptions))
 
-    // Handle OPTIONS preflight requests explicitly for upload endpoint
     app.options('/api/recorder/upload', cors(corsOptions), (req, res) => {
       res.status(204).end()
     })
