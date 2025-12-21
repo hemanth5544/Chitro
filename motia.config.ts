@@ -13,16 +13,23 @@ import { VideoService } from './src/services/video-service.js'
 export default defineConfig({
   plugins: [observabilityPlugin, statesPlugin, endpointPlugin, logsPlugin, bullmqPlugin, chitroRecorderPlugin],
   app: (app) => {
-    // Enable CORS for frontend
-    app.use(cors({
-      origin: ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:5174'],
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Filename'],
-    }))
+    // Enable CORS - Allow all origins (no credentials needed)
+    const corsOptions = {
+      origin: true, // Allow all origins
+      credentials: false, // No credentials needed
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Filename', 'X-Requested-With', 'Accept'],
+      exposedHeaders: ['Content-Length', 'Content-Type'],
+    }
+    app.use(cors(corsOptions))
+
+    // Handle OPTIONS preflight requests explicitly for upload endpoint
+    app.options('/api/recorder/upload', cors(corsOptions), (req, res) => {
+      res.status(204).end()
+    })
 
     // Handle video uploads directly (bypass Motia to avoid spawn E2BIG error with large files)
-    app.post('/api/recorder/upload', express.raw({ 
+    app.post('/api/recorder/upload', cors(corsOptions), express.raw({ 
       type: ['video/webm', 'video/*', 'application/octet-stream'],
       limit: 500 * 1024 * 1024, // 500MB in bytes
     }), async (req, res) => {

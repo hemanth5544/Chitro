@@ -5,6 +5,8 @@
   "scripts": {
     "postinstall": "motia install",
     "dev": "motia dev",
+    "frontend": "cd frontend && npm run dev",
+    "start:app": "concurrently \"npm run frontend\" \"motia start\"",
     "start": "motia start",
     "generate-types": "motia generate-types",
     "build": "motia build",
